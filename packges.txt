@@ -1,0 +1,8 @@
+mpmath urllib3 typing_extensions threadpoolctl sympy safetensors regex pyyaml Pillow packaging numpy networkx MarkupSafe joblib
+idna fsspec filelock colorama charset_normalizer certifi
+tqdm scipy requests jinja2
+torch
+scikit-learn
+huggingface-hub tokenizers
+transformers
+sentence-transformers
