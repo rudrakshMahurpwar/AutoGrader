@@ -1,57 +1,97 @@
-from utils import grade_long_answers
+from sentence_transformers import SentenceTransformer, util
+import torch
+import re
+import requests
+
+from data import *
 
 
-def get_ques_input():
-    q_id: int = int(input("Enter Question id number: "))
-    question: str = input("Enter Question: ")
-    ref_answer: str = input("Enter Reference Answer: ")
-
-    return {"q_id": q_id, "question": question, "ref_answer": ref_answer}
+def sent_tokenize(text):
+    return re.split(r"(?<=[.!?])\s+", text.strip())
 
 
-def get_stud_data():
-    stud_id: int = int(input("Enter Student id: "))
-    stud_name: str = input("Enter Student Name: ")
-
-    return {"stud_id": stud_id, "stud_name": stud_name}
+# Load the model
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
-def get_stud_answer(stud_id):
-    stud_answer: str = input("Enter Student Answer: ")
+def compute_chunkwise_similarity(ref_text, student_text):
+    # Tokenize into sentences
+    ref_chunks = sent_tokenize(ref_text)
+    student_chunks = sent_tokenize(student_text)
 
-    return stud_answer
+    # Encode all chunks
+    ref_embeddings = model.encode(ref_chunks, convert_to_tensor=True)
+    student_embeddings = model.encode(student_chunks, convert_to_tensor=True)
 
+    # Compute pairwise cosine similarity matrix
+    similarity_matrix = util.cos_sim(ref_embeddings, student_embeddings)
 
-if __name__ == "__main__":
+    # Get max similarity for each reference sentence
+    max_similarities = torch.max(similarity_matrix, dim=1).values
 
-    enter_question: bool = True
-    questions_list = []
-    while enter_question:
-        ques_data = get_ques_input()
-        questions_list.append(ques_data)
-        response: str = input("Enter one more Question? (yes/no): ").strip().lower()
-        enter_question = response in ["yes", "y", "yeah", "sure"]
-        print()
-    print(questions_list)
-
-    enter_student: bool = True
-    students_list = []
-    while enter_student:
-        stud_data = get_stud_data()
-        students_list.append(stud_data)
-        response: str = input("Enter one more Student? (yes/no): ").strip().lower()
-        enter_student = response in ["yes", "y", "yeah", "sure"]
-        print()
-    print(students_list)
-
-    student_answers = []
-    for s in students_list:
-        print(s)
-        print(f"Student Id: {s['stud_id']}, Student name: {s['stud_name']}")
-        for q in questions_list:
-            print(f"Question {q['q_id']}: {q['question']}")
-            stud_answer = get_stud_answer(s["stud_id"])
-            print(stud_answer)
-    grade_long_answers(
-        reference_answers=questions_list, student_answers=student_answers
+    # Apply threshold: set values below 0.4 to 0
+    threshold = 0.4
+    max_similarities = torch.where(
+        max_similarities < threshold, torch.tensor(0.0), max_similarities
     )
+
+    # Compute final score
+    score = torch.mean(max_similarities).item()
+
+    return round(score, 4)
+
+
+def get_llm_feedback(question, reference, student_answer):
+    prompt = (
+        f"You are an academic evaluator. "
+        f"Evaluate the student's answer based only on the reference answer. "
+        f"Focus on factual accuracy, completeness, and clarity."
+        f"Limit to 4 sentences.\n\n"
+        f"Question: {question}\n"
+        f"Reference Answer: {reference}\n"
+        f"Student's Answer: {student_answer}\n"
+        f"Feedback:"
+    )
+
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "phi",
+                "prompt": prompt.strip(),
+                "stream": False,
+            },
+        )
+        data = response.json()
+        return data["response"].strip()
+    except Exception as e:
+        return f"⚠️ Error generating feedback: {e}"
+
+
+def grade_long_answers(reference_answers, student_answers):
+    results = {}
+
+    for student, answers in student_answers.items():
+        student_result = {}
+        for q_id, student_text in answers.items():
+            ref_text = reference_answers[q_id]
+            question_text = questions[q_id]
+            feedback = get_llm_feedback(question_text, ref_text, student_text)
+            score = compute_chunkwise_similarity(ref_text, student_text)
+            print("Score: ", score)
+            student_result[q_id] = {"score": score, "feedback": feedback}
+        results[student] = student_result
+
+    return results
+
+
+# Run the grading system
+results = grade_long_answers(reference_answers, student_answers)
+
+# Display results
+for student, answers in results.items():
+    print(f"\n📝 Results for {student}:")
+    for q_id, info in answers.items():
+        print(f"\nQuestion {q_id}:")
+        print(f"  🔢 Similarity Score: {info['score']}")
+        print(f"  🧠 LLM Feedback:\n  {info['feedback']}")
