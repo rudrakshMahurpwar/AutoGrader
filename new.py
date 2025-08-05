@@ -36,7 +36,7 @@ def compute_chunkwise_similarity(ref_text, student_text):
         max_similarities < threshold, torch.tensor(0.0), max_similarities
     )
 
-    print("Thresholded Max Similarities:\n", max_similarities)
+    # print("Thresholded Max Similarities:\n", max_similarities)
 
     # Compute final score
     score = torch.mean(max_similarities).item()
@@ -48,7 +48,7 @@ def get_llm_feedback(question, reference, student_answer):
     prompt = (
         f"You are an academic evaluator. "
         f"Evaluate the student's answer based only on the reference answer. "
-        f"Focus on factual accuracy, completeness, and clarity. "
+        f"Focus on factual accuracy, completeness, and clarity."
         f"Limit to 4 sentences.\n\n"
         f"Question: {question}\n"
         f"Reference Answer: {reference}\n"
@@ -76,14 +76,14 @@ def grade_long_answers(reference_answers, student_answers):
 
     for student, answers in student_answers.items():
         student_result = {}
-        print(f"\nEvaluating answers for: {student}")
+        # print(f"\nEvaluating answers for: {student}")
         for q_id, student_text in answers.items():
             ref_text = reference_answers[q_id]
             question_text = questions[q_id]
             feedback = get_llm_feedback(question_text, ref_text, student_text)
-            print("feedback")
+            # print("feedback")
             score = compute_chunkwise_similarity(ref_text, student_text)
-            print("Score: ", score)
+            # print("Score: ", score)
             student_result[q_id] = {"score": score, "feedback": feedback}
         results[student] = student_result
 
