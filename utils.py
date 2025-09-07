@@ -1,6 +1,7 @@
 from sentence_transformers import SentenceTransformer, util
 import torch
 import re
+import requests
 
 
 def sent_tokenize(text):
@@ -43,3 +44,30 @@ def grade_long_answers(reference_answers, student_answers):
         results[student] = student_result
 
     return results
+
+
+def get_llm_feedback(question, reference, student_answer):
+    prompt = (
+        f"You are an academic evaluator. "
+        f"Evaluate the student's answer based only on the reference answer. "
+        f"Focus on factual accuracy, completeness, and clarity."
+        f"Limit to 4 sentences.\n\n"
+        f"Question: {question}\n"
+        f"Reference Answer: {reference}\n"
+        f"Student's Answer: {student_answer}\n"
+        f"Feedback:"
+    )
+
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "phi",
+                "prompt": prompt.strip(),
+                "stream": False,
+            },
+        )
+        data = response.json()
+        return data["response"].strip()
+    except Exception as e:
+        return f"⚠️ Error generating feedback: {e}"
