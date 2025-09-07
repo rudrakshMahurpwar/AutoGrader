@@ -1,0 +1,41 @@
+def compute_chunkwise_similarity(ref_text, student_text):
+    # Tokenize into sentences
+    ref_chunks = sent_tokenize(ref_text)
+    student_chunks = sent_tokenize(student_text)
+
+    # Encode all chunks
+    ref_embeddings = model.encode(ref_chunks, convert_to_tensor=True)
+    student_embeddings = model.encode(student_chunks, convert_to_tensor=True)
+
+    # Compute pairwise cosine similarity matrix
+    similarity_matrix = util.cos_sim(ref_embeddings, student_embeddings)
+
+    # --- Step 1: Reference to Student (main score) ---
+    max_similarities_ref = torch.max(similarity_matrix, dim=1).values
+    threshold = 0.4
+    max_similarities_ref = torch.where(
+        max_similarities_ref < threshold, torch.tensor(0.0), max_similarities_ref
+    )
+
+    # Weighted average
+    num_ref_sentences = len(ref_chunks)
+    weights = torch.ones(num_ref_sentences)
+    weights[:2] = 2.0  # Example: make first 2 reference sentences more important
+    weights = weights.to(max_similarities_ref.device).type_as(max_similarities_ref)
+
+    ref_score = (max_similarities_ref * weights).sum() / weights.sum()
+
+    # --- Step 2: Student to Reference (irrelevance penalty) ---
+    max_similarities_student = torch.max(similarity_matrix, dim=0).values
+    irrelevant_mask = max_similarities_student < threshold
+    num_irrelevant = torch.sum(irrelevant_mask).item()
+    total_student_sentences = len(student_chunks)
+    irrelevance_ratio = num_irrelevant / total_student_sentences if total_student_sentences else 0
+
+    # Penalty weight: how strongly to penalize irrelevant content (tune this)
+    irrelevance_penalty_weight = 0.3  # between 0.0 and 1.0
+
+    # Combine into final score
+    final_score = ref_score * (1 - irrelevance_penalty_weight * irrelevance_ratio)
+
+    return round(final_score.item(), 4)
