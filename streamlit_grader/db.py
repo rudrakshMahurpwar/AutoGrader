@@ -12,10 +12,13 @@ def get_connection():
 
 
 # --- Students ---
-def add_student(name):
+def add_student(roll_number, name):
     conn = get_connection()
     with conn:
-        conn.execute("INSERT OR IGNORE INTO Students (name) VALUES (?)", (name,))
+        conn.execute(
+            "INSERT OR IGNORE INTO Students (roll_number, name) VALUES (?, ?)",
+            (roll_number, name),
+        )
 
 
 def get_students():
@@ -54,22 +57,14 @@ def add_submission(student_id, question_id, answer_text):
         return cursor.lastrowid  # Submission ID
 
 
-def add_score(submission_id, similarity_score, rubric_json, final_score):
-    conn = get_connection()
-    with conn:
-        conn.execute(
-            "INSERT INTO Scores (submission_id, similarity_score, rubric_json, final_score) VALUES (?, ?, ?, ?)",
-            (submission_id, similarity_score, rubric_json, final_score),
-        )
-
-
 def get_student_submissions(student_id):
     conn = get_connection()
     return conn.execute(
         """
         SELECT s.id as submission_id, s.answer_text, s.submitted_at,
                q.question, q.reference_answer,
-               sc.similarity_score, sc.rubric_json, sc.final_score
+               sc.similarity_score, sc.rubric_json, sc.final_score,
+               sc.feedback, sc.teacher_score
         FROM Submissions s
         JOIN Questions q ON s.question_id = q.id
         LEFT JOIN Scores sc ON sc.submission_id = s.id
@@ -78,3 +73,22 @@ def get_student_submissions(student_id):
     """,
         (student_id,),
     ).fetchall()
+
+
+def add_score(submission_id, similarity_score, rubric_json, final_score, feedback):
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            """INSERT INTO Scores (submission_id, similarity_score, rubric_json, final_score, feedback)
+               VALUES (?, ?, ?, ?, ?)""",
+            (submission_id, similarity_score, rubric_json, final_score, feedback),
+        )
+
+
+def update_teacher_score(submission_id, teacher_score):
+    conn = get_connection()
+    with conn:
+        conn.execute(
+            "UPDATE Scores SET teacher_score = ? WHERE submission_id = ?",
+            (teacher_score, submission_id),
+        )

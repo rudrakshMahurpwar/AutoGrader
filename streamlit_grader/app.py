@@ -44,19 +44,20 @@ if page == "➕ Add Questions":
 elif page == "👤 Add Students":
     st.header("👤 Add New Student")
     with st.form("add_student"):
+        roll_number = st.text_input("Roll Number")
         name = st.text_input("Student Name")
         submit = st.form_submit_button("Add Student")
         if submit:
-            if name:
-                add_student(name)
-                st.success(f"✅ Student '{name}' added.")
+            if roll_number and name:
+                add_student(roll_number, name)
+                st.success(f"✅ Student '{name}' (Roll: {roll_number}) added.")
             else:
-                st.error("❌ Please enter a name.")
+                st.error("❌ Please enter both roll number and name.")
 
     st.subheader("📋 All Students")
     students = get_students()
     for s in students:
-        st.markdown(f"- {s['name']}")
+        st.markdown(f"- **{s['roll_number']}** – {s['name']}")
 
 # 3️⃣ Submit Answers
 elif page == "📝 Submit Answers":
@@ -68,17 +69,18 @@ elif page == "📝 Submit Answers":
     if not students or not questions:
         st.warning("⚠️ Add at least one student and one question first.")
     else:
-        student_names = [s["name"] for s in students]
+        student_options = [f"{s['roll_number']} – {s['name']}" for s in students]
+        student_selection = st.selectbox("Select Student", student_options)
+        student = students[student_options.index(student_selection)]
+
         question_texts = [f"Q{q['id']}: {q['question']}" for q in questions]
 
         with st.form("submit_answer"):
-            student_name = st.selectbox("Select Student", student_names)
             question_selection = st.selectbox("Select Question", question_texts)
             student_answer = st.text_area("Student's Answer")
             submit = st.form_submit_button("Grade Answer")
 
             if submit:
-                student = next(s for s in students if s["name"] == student_name)
                 q_idx = question_texts.index(question_selection)
                 question = questions[q_idx]
 
@@ -106,7 +108,11 @@ elif page == "📝 Submit Answers":
 
                     # Save score
                     add_score(
-                        submission_id, similarity_score, json.dumps(rubric), final_score
+                        submission_id,
+                        similarity_score,
+                        json.dumps(rubric),
+                        final_score,
+                        feedback,
                     )
 
                     # Display result
@@ -129,8 +135,14 @@ elif page == "📊 View Results":
     if not students:
         st.warning("⚠️ Add some students first.")
     else:
-        student_name = st.selectbox("Select Student", [s["name"] for s in students])
-        student = next(s for s in students if s["name"] == student_name)
+        student_options = [f"{s['roll_number']} – {s['name']}" for s in students]
+        student_selection = st.selectbox("Select Student", student_options)
+        student = students[student_options.index(student_selection)]
+
+        # 🔹 Show student info
+        st.markdown(f"### 🧑 Student: **{student['name']}**")
+        st.markdown(f"**Roll Number:** `{student['roll_number']}`")
+        st.markdown("---")
 
         submissions = get_student_submissions(student["id"])
         if not submissions:
@@ -143,12 +155,28 @@ elif page == "📊 View Results":
 
                 if sub["similarity_score"] is not None:
                     st.markdown(f"**Similarity Score:** `{sub['similarity_score']}`")
-                    st.markdown(f"**Final Score:** `{sub['final_score']}`")
+                    st.markdown(f"**Final Score (AI):** `{sub['final_score']}`")
 
+                    # 🔹 Rubric Scores
                     rubric = json.loads(sub["rubric_json"])
                     st.markdown("**Rubric Scores:**")
                     for crit, score in rubric.items():
                         st.markdown(f"- {crit}: {score}/5")
+
+                    # 🔹 Feedback
+                    if "feedback" in sub.keys() and sub["feedback"]:
+                        st.markdown("**🧠 Feedback:**")
+                        st.info(sub["feedback"])
+
+                    # 🔹 Teacher override score
+                    teacher_score = st.number_input(
+                        "Teacher Override Score",
+                        value=sub["final_score"] if sub["final_score"] else 0.0,
+                        key=f"teacher_score_{sub['submission_id']}",
+                    )
+                    if st.button("Save Override", key=f"save_{sub['submission_id']}"):
+                        update_teacher_score(sub["submission_id"], teacher_score)
+                        st.success("✅ Teacher score saved.")
                 else:
                     st.warning("⚠️ Grading pending.")
                 st.markdown("---")
