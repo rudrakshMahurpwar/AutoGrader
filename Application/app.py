@@ -12,7 +12,7 @@ import json, io, csv
 
 st.set_page_config(page_title="Auto Grader", layout="wide")
 
-st.title("📘 AI-Powered Answer Grader")
+st.title("Design and Implementation of Automated Answer Evaluation System ")
 
 # Sidebar navigation
 page = st.sidebar.selectbox(
