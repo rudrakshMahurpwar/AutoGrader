@@ -56,6 +56,32 @@ def compute_chunkwise_similarity(ref_text, student_text):
     return round(final_score.item(), 4)
 
 
+def get_sentence_similarity_details(ref_text, student_text):
+    """
+    Returns per-sentence similarity scores for the student's answer.
+    Each student sentence is matched with the most similar reference sentence.
+    """
+    ref_chunks = sent_tokenize(ref_text)
+    student_chunks = sent_tokenize(student_text)
+
+    if not student_chunks:
+        return []
+
+    # Encode
+    ref_embeddings = model.encode(ref_chunks, convert_to_tensor=True)
+    student_embeddings = model.encode(student_chunks, convert_to_tensor=True)
+
+    # sim_matrix[stu_i][ref_j] = similarity
+    sim_matrix = util.cos_sim(student_embeddings, ref_embeddings)
+
+    results = []
+    for i, stu_sent in enumerate(student_chunks):
+        best_score = float(sim_matrix[i].max())
+        results.append((stu_sent, round(best_score, 4)))
+
+    return results
+
+
 def get_mistral_feedback_and_rubric(question, reference, student_answer):
     prompt = f"""
 You are an expert academic evaluator.
@@ -126,7 +152,7 @@ def normalize_rubric_scores(rubric_scores):
 
 
 def combine_scores(
-    similarity_score, rubric_scores, similarity_weight=0.3, rubric_weight=0.7
+    similarity_score, rubric_scores, similarity_weight=0.7, rubric_weight=0.3
 ):
     normalized_rubric = normalize_rubric_scores(rubric_scores)
 

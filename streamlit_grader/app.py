@@ -4,10 +4,11 @@ import streamlit as st
 from db import *
 from grading import (
     compute_chunkwise_similarity,
+    get_sentence_similarity_details,
     get_mistral_feedback_and_rubric,
     combine_scores,
 )
-import json
+import json, io, csv
 
 st.set_page_config(page_title="Auto Grader", layout="wide")
 
@@ -59,6 +60,7 @@ elif page == "👤 Add Students":
     for s in students:
         st.markdown(f"- **{s['roll_number']}** – {s['name']}")
 
+
 # 3️⃣ Submit Answers
 elif page == "📝 Submit Answers":
     st.header("📝 Submit Student Answer")
@@ -74,64 +76,173 @@ elif page == "📝 Submit Answers":
         student = students[student_options.index(student_selection)]
 
         question_texts = [f"Q{q['id']}: {q['question']}" for q in questions]
+        question_selection = st.selectbox("Select Question", question_texts)
+        q_idx = question_texts.index(question_selection)
+        question = questions[q_idx]
+
+        # 🔍 Check if student already submitted this question
+        existing_submission = get_student_submission(student["id"], question["id"])
+
+        # Pre-fill answer if exists
+        existing_answer = (
+            existing_submission["answer_text"] if existing_submission else ""
+        )
 
         with st.form("submit_answer"):
-            question_selection = st.selectbox("Select Question", question_texts)
-            student_answer = st.text_area("Student's Answer")
-            submit = st.form_submit_button("Grade Answer")
+            student_answer = st.text_area("Student's Answer", value=existing_answer)
+            submit = st.form_submit_button("Save Answer")
 
             if submit:
-                q_idx = question_texts.index(question_selection)
-                question = questions[q_idx]
+                try:
+                    if existing_submission:
+                        # 🔄 Update existing submission
+                        update_submission(
+                            existing_submission["submission_id"], student_answer
+                        )
+                        submission_id = existing_submission["submission_id"]
+                        st.info("✏️ Answer updated successfully!")
+                    else:
+                        # 🆕 Create new submission
+                        submission_id = add_submission(
+                            student["id"], question["id"], student_answer
+                        )
+                        st.success("✅ New answer submitted!")
 
-                # Save submission
-                submission_id = add_submission(
-                    student["id"], question["id"], student_answer
-                )
-
-                # Compute similarity score
-                similarity_score = compute_chunkwise_similarity(
-                    question["reference_answer"], student_answer
-                )
-
-                # Get rubric + feedback
-                llm_result = get_mistral_feedback_and_rubric(
-                    question["question"], question["reference_answer"], student_answer
-                )
-
-                if "error" in llm_result:
-                    st.error(f"❌ LLM error: {llm_result['error']}")
-                else:
-                    rubric = llm_result["rubric"]
-                    feedback = llm_result["feedback"]
-                    final_score = combine_scores(similarity_score, rubric)
-
-                    # Save score
-                    add_score(
-                        submission_id,
-                        similarity_score,
-                        json.dumps(rubric),
-                        final_score,
-                        feedback,
+                    # ✅ Always grade (for both update & new)
+                    similarity_score = compute_chunkwise_similarity(
+                        question["reference_answer"], student_answer
                     )
 
-                    # Display result
-                    st.success("✅ Answer graded successfully!")
-                    st.markdown(f"**Similarity Score:** `{similarity_score}`")
-                    st.markdown(f"**Final Score:** `{final_score}`")
+                    llm_result = get_mistral_feedback_and_rubric(
+                        question["question"],
+                        question["reference_answer"],
+                        student_answer,
+                    )
 
-                    st.subheader("📊 Rubric")
-                    for crit, score in rubric.items():
-                        st.markdown(f"- **{crit}**: {score}/5")
+                    if "error" in llm_result:
+                        st.error(f"❌ LLM error: {llm_result['error']}")
+                    else:
+                        rubric = llm_result["rubric"]
+                        feedback = llm_result["feedback"]
+                        final_score = combine_scores(similarity_score, rubric)
 
-                    st.subheader("🧠 Feedback")
-                    st.markdown(feedback)
+                        # Save score (overwrite if exists)
+                        add_score(
+                            submission_id,
+                            similarity_score,
+                            json.dumps(rubric),
+                            final_score,
+                            feedback,
+                        )
+
+                        st.success("✅ Answer graded successfully!")
+                        st.markdown(f"**Similarity Score:** `{similarity_score}`")
+                        st.markdown(f"**Final Score:** `{final_score}`")
+
+                        st.subheader("📊 Rubric")
+                        for crit, score in rubric.items():
+                            st.markdown(f"- **{crit}**: {score}/5")
+
+                        st.subheader("🧠 Feedback")
+                        st.markdown(feedback)
+
+                        # 🔍 Highlight most relevant sentences in student's answer
+                        sentence_scores = get_sentence_similarity_details(
+                            question["reference_answer"], student_answer
+                        )
+
+                        highlighted_answer = ""
+                        for sent, score in sentence_scores:
+                            if score > 0.9:  # threshold
+                                highlighted_answer += f"**`{sent}`** "
+                            else:
+                                highlighted_answer += f"{sent} "
+
+                        st.subheader("Student Answer with Highlights")
+                        st.markdown(highlighted_answer, unsafe_allow_html=True)
+
+                except Exception as e:
+                    # 👨‍🏫 Friendly duplicate error message
+                    if "UNIQUE constraint" in str(e):
+                        st.warning(
+                            "⚠️ You have already submitted an answer for this question. Please edit it instead."
+                        )
+                    else:
+                        st.error(f"❌ Unexpected error: {e}")
+
 
 # 4️⃣ View Results
 elif page == "📊 View Results":
     st.header("📊 View Student Results")
 
+    # 📥 Download CSV button (all students at once)
+    results = get_all_results()
+    if results:
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        # CSV header
+        writer.writerow(
+            [
+                "Roll Number",
+                "Name",
+                "Question",
+                "Answer",
+                "High-Similarity Sentences",
+                "Similarity Score",
+                "Final Score",
+                "Teacher Score",
+                "Factual Accuracy",
+                "Completeness",
+                "Clarity",
+                "Relevance",
+                "Feedback",
+                "Submitted At",
+            ]
+        )
+
+        for r in results:
+            rubric = json.loads(r["rubric_json"]) if r["rubric_json"] else {}
+            high_sim_sents = ""
+            if (
+                r["answer_text"] and r["question"]
+            ):  # ensure answer + reference available
+                sentence_scores = get_sentence_similarity_details(
+                    r["question"], r["answer_text"]
+                )
+                high_sim_sents = "; ".join(
+                    [sent for sent, score in sentence_scores if score > 0.9]
+                )
+
+            writer.writerow(
+                [
+                    r["roll_number"],
+                    r["name"],
+                    r["question"],
+                    r["answer_text"],
+                    high_sim_sents,
+                    r["similarity_score"],
+                    r["final_score"],
+                    r["teacher_score"],
+                    rubric.get("Factual Accuracy", ""),
+                    rubric.get("Completeness", ""),
+                    rubric.get("Clarity", ""),
+                    rubric.get("Relevance", ""),
+                    r["feedback"],
+                    r["submitted_at"],
+                ]
+            )
+
+        st.download_button(
+            label="📥 Download All Results (CSV)",
+            data=output.getvalue(),
+            file_name="grading_results.csv",
+            mime="text/csv",
+        )
+
     students = get_students()
+
     if not students:
         st.warning("⚠️ Add some students first.")
     else:
@@ -144,6 +255,69 @@ elif page == "📊 View Results":
         st.markdown(f"**Roll Number:** `{student['roll_number']}`")
         st.markdown("---")
 
+        # 📥 Download Individual Marksheet button
+        student_submissions = get_student_submissions(student["id"])
+        if student_submissions:
+            output = io.StringIO()
+            writer = csv.writer(output)
+
+            # CSV header
+            writer.writerow(
+                [
+                    "Roll Number",
+                    "Name",
+                    "Question",
+                    "Answer",
+                    "High-Similarity Sentences",
+                    "Similarity Score",
+                    "Final Score",
+                    "Teacher Score",
+                    "Factual Accuracy",
+                    "Completeness",
+                    "Clarity",
+                    "Relevance",
+                    "Feedback",
+                    "Submitted At",
+                ]
+            )
+
+            for sub in student_submissions:
+                rubric = json.loads(sub["rubric_json"]) if sub["rubric_json"] else {}
+                high_sim_sents = ""
+                if sub["answer_text"] and sub["question"]:
+                    sentence_scores = get_sentence_similarity_details(
+                        sub["reference_answer"], sub["answer_text"]
+                    )
+                    high_sim_sents = "; ".join(
+                        [sent for sent, score in sentence_scores if score > 0.9]
+                    )
+
+                writer.writerow(
+                    [
+                        student["roll_number"],
+                        student["name"],
+                        sub["question"],
+                        sub["answer_text"],
+                        high_sim_sents,
+                        sub["similarity_score"],
+                        sub["final_score"],
+                        sub["teacher_score"],
+                        rubric.get("Factual Accuracy", ""),
+                        rubric.get("Completeness", ""),
+                        rubric.get("Clarity", ""),
+                        rubric.get("Relevance", ""),
+                        sub["feedback"],
+                        sub["submitted_at"],
+                    ]
+                )
+
+            st.download_button(
+                label=f"📥 Download {student['name']}'s Marksheet (CSV)",
+                data=output.getvalue(),
+                file_name=f"{student['roll_number']}_{student['name']}_marksheet.csv",
+                mime="text/csv",
+            )
+
         submissions = get_student_submissions(student["id"])
         if not submissions:
             st.info("ℹ️ No submissions found for this student.")
@@ -151,7 +325,19 @@ elif page == "📊 View Results":
             for sub in submissions:
                 st.subheader(f"📝 {sub['question']}")
                 st.markdown(f"**Submitted on:** {sub['submitted_at']}")
-                st.markdown(f"**Answer:** {sub['answer_text']}")
+                st.subheader("📌 Student Answer")
+                sentence_scores = get_sentence_similarity_details(
+                    sub["reference_answer"], sub["answer_text"]
+                )
+
+                highlighted_answer = ""
+                for sent, score in sentence_scores:
+                    if score > 0.9:
+                        highlighted_answer += f"**`{sent}`** "
+                    else:
+                        highlighted_answer += f"{sent} "
+
+                st.markdown(highlighted_answer, unsafe_allow_html=True)
 
                 if sub["similarity_score"] is not None:
                     st.markdown(f"**Similarity Score:** `{sub['similarity_score']}`")
