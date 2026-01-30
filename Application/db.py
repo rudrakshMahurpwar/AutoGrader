@@ -60,13 +60,13 @@ def add_submission(student_id, question_id, answer_text):
         ).fetchone()
 
         if existing:
-            return None  # Duplicate -> handled gracefully at frontend
+            return None
 
         cursor = conn.execute(
             "INSERT INTO Submissions (student_id, question_id, answer_text, submitted_at) VALUES (?, ?, ?, ?)",
             (student_id, question_id, answer_text, datetime.now().isoformat()),
         )
-        return cursor.lastrowid  # New submission ID
+        return cursor.lastrowid
 
 
 def get_student_submissions(student_id):

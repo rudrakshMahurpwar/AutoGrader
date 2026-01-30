@@ -13,7 +13,7 @@ load_dotenv()
 MISTRAL_API_KEY = os.getenv("API_KEY")
 
 if not MISTRAL_API_KEY:
-    raise ValueError("❌ API key not found. Set API_KEY in your .env file.")
+    raise ValueError(" API key not found. Set API_KEY in your .env file.")
 
 # Load SBERT model once
 model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -123,7 +123,7 @@ Student Answer: {student_answer}
     }
 
     data = {
-        "model": "mistralai/mistral-7b-instruct:free",
+        "model": "openai/gpt-oss-20b:free",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 400,
         "temperature": 0.3,
