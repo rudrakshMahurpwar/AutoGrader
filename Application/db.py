@@ -31,12 +31,16 @@ def get_students():
 
 
 # --- Questions ---
-def add_question(question, reference_answer):
+def add_question(question, reference_answer, domain="general"):
     conn = get_connection()
     with conn:
+        # conn.execute(
+        #     "INSERT INTO Questions (question, reference_answer) VALUES (?, ?)",
+        #     (question, reference_answer),
+        # )
         conn.execute(
-            "INSERT INTO Questions (question, reference_answer) VALUES (?, ?)",
-            (question, reference_answer),
+            "INSERT INTO Questions (question, reference_answer, domain) VALUES (?, ?, ?)",
+            (question, reference_answer, domain),
         )
 
 

@@ -3,9 +3,10 @@
 import streamlit as st
 from db import *
 from grading import (
+    LLM_API_KEY,
     compute_chunkwise_similarity,
     get_sentence_similarity_details,
-    get_mistral_feedback_and_rubric,
+    llm_feedback_and_rubric,
     combine_scores,
 )
 import json, io, csv
@@ -22,17 +23,27 @@ page = st.sidebar.selectbox(
 
 # 1️⃣ Add Questions
 if page == "➕ Add Questions":
+    domains = [
+        "general",
+        "biology",
+        # "finance",
+        # "law",
+        # "english",
+        # "technical",
+        "science",
+    ]
     st.header("➕ Add a New Question")
     with st.form("add_question"):
         question = st.text_area("Question")
         reference_answer = st.text_area("Reference Answer (Ideal Answer)")
+        domain = st.selectbox("Domain", domains)
         submit = st.form_submit_button("Add Question")
         if submit:
             if question and reference_answer:
-                add_question(question, reference_answer)
-                st.success("✅ Question added successfully!")
+                add_question(question, reference_answer, domain)
+                st.success(f"✅ Question added under domain '{domain}'")
             else:
-                st.error("❌ Please fill both fields.")
+                st.error("❌ Please fill all fields")
 
     st.subheader("📚 All Questions")
     questions = get_questions()
@@ -110,10 +121,12 @@ elif page == "📝 Submit Answers":
 
                     # ✅ Always grade (for both update & new)
                     similarity_score = compute_chunkwise_similarity(
-                        question["reference_answer"], student_answer
+                        question["reference_answer"],
+                        student_answer,
+                        domain=question["domain"],
                     )
 
-                    llm_result = get_mistral_feedback_and_rubric(
+                    llm_result = llm_feedback_and_rubric(
                         question["question"],
                         question["reference_answer"],
                         student_answer,
