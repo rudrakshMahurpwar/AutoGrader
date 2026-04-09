@@ -1,4 +1,9 @@
+# db.py
+
 import sqlite3
+import py_compile
+
+
 from datetime import datetime
 
 DB_PATH = "grader.db"

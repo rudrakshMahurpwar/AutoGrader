@@ -86,63 +86,66 @@ def get_mistral_feedback_and_rubric(question, reference, student_answer):
     prompt = f"""
 You are an expert academic evaluator.
 
-Evaluate the student's answer using the reference answer and question. Grade only what is supported by the reference answer or general factual knowledge. Do not reward hallucinated or incorrect content.
+You MUST return valid JSON only.
+Do NOT include explanations, markdown, or extra text.
 
-1. Score the student's answer on a 0–5 scale for each criterion:
-   - Factual Accuracy
-   - Completeness
-   - Clarity
-   - Relevance
-
-2. Then, write 3-4 sentences of feedback:
-   - Strengths
-   - Weaknesses
-   - Suggestions for improvement
-
-Return ONLY a JSON object like this:
+Return exactly this schema:
 {{
   "rubric": {{
-    "Factual Accuracy": <0-5>,
-    "Completeness": <0-5>,
-    "Clarity": <0-5>,
-    "Relevance": <0-5>
+    "Factual Accuracy": 0-5,
+    "Completeness": 0-5,
+    "Clarity": 0-5,
+    "Relevance": 0-5
   }},
-  "feedback": "<concise feedback>"
+  "feedback": "3–4 sentences of concise feedback."
 }}
 
 Question: {question}
-
 Reference Answer: {reference}
-
 Student Answer: {student_answer}
 """
 
-    headers = {
-        "Authorization": f"Bearer {MISTRAL_API_KEY}",
-        "Content-Type": "application/json",
-    }
-
     data = {
-        "model": "openai/gpt-oss-20b:free",
+        "model": "openai/gpt-oss-120b:free",
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 400,
         "temperature": 0.3,
+        "response_format": {"type": "json_object"},
     }
 
     response = requests.post(
         "https://openrouter.ai/api/v1/chat/completions",
-        headers=headers,
+        headers={
+            "Authorization": f"Bearer {MISTRAL_API_KEY}",
+            "Content-Type": "application/json",
+        },
         data=json.dumps(data),
     )
 
-    if response.status_code == 200:
-        try:
-            content = response.json()["choices"][0]["message"]["content"]
-            return json.loads(content)
-        except Exception as e:
-            return {"error": f"Failed to parse JSON: {e}"}
-    else:
+    if response.status_code != 200:
         return {"error": f"API Error {response.status_code}: {response.text}"}
+
+    content = response.json()["choices"][0]["message"].get("content")
+
+    if not content:
+        return {"error": "LLM returned empty content"}
+
+    return json.loads(content)
+
+
+def extract_json(text: str):
+    if not text or not text.strip():
+        raise ValueError("Empty response from LLM")
+
+    # Remove markdown fences if present
+    text = re.sub(r"```(?:json)?", "", text).strip()
+
+    # Extract first JSON object
+    match = re.search(r"\{[\s\S]*\}", text)
+    if not match:
+        raise ValueError(f"No JSON object found. Raw output:\n{text}")
+
+    return json.loads(match.group())
 
 
 def normalize_rubric_scores(rubric_scores):

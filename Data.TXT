@@ -1,0 +1,82 @@
+Prompt
+
+"""
+Create a question based on the given topic. Then, provide the following:
+
+A model reference answer in a single paragraph.
+
+Three student responses:
+  a) A correct answer
+  b) A partially correct answer
+  c) An irrelevant or incorrect answer
+Ensure the question requires a short explanatory answer and aligns with middle school to high school level.
+
+Topic:
+"""
+------------------------------
+
+### More Questions for Long-Answer Checking
+
+1. **Explain the water cycle and its stages.**
+
+2. **Describe the structure and function of the human respiratory system.**
+
+3. **Explain the causes and effects of deforestation.**
+
+4. **Describe how electricity is generated in a power plant.**
+
+5. **Explain the process of cell division (mitosis).**
+
+6. **Describe the importance of recycling and its impact on the environment.**
+
+7. **Explain how vaccines help protect the human body from diseases.**
+
+8. **Describe the different states of matter and how they change from one to another.**
+
+9. **Explain the causes of the seasons on Earth.**
+
+10. **Describe the main functions of the nervous system in humans.**
+
+
+
+
+**"Explain how the digestive system works in the human body."**
+
+---
+
+### 1. Highly Correct Answer (Student 1)
+
+The digestive system breaks down food into nutrients that the body can absorb and use for energy, growth, and repair. It involves a series of organs working together to process food from ingestion to elimination. Digestion begins in the mouth, where food is chewed and mixed with saliva containing enzymes like amylase that start breaking down carbohydrates. The food then passes down the esophagus into the stomach, where gastric juices containing hydrochloric acid and pepsin begin breaking down proteins. Next, the semi-liquid food moves to the small intestine, where enzymes from the pancreas and bile from the liver complete digestion and nutrients are absorbed into the bloodstream. Remaining waste proceeds to the large intestine, where water is absorbed and feces are formed before being eliminated through the rectum and anus. This entire process ensures the body receives essential nutrients for proper functioning.
+
+---
+
+### 2. Partially Correct Answer (Student 2)
+
+The digestive system helps to break down food. Food starts in the mouth and then goes to the stomach where it is digested. The stomach uses acid to break down food. Then the food goes to the intestines where nutrients are absorbed. The leftover food becomes waste and leaves the body. The digestive system also involves the liver and pancreas that help with digestion.
+
+---
+
+### 3. Irrelevant Answer (Student 3)
+
+The digestive system is very important because it helps the body stay healthy. I like eating pizza and fruits because they taste good. Exercise is also important for a healthy life. Sometimes I go for a walk after eating. My favorite color is blue.
+
+
+
+
+-----------------------------------------------------
+
+Describe how electricity is generated in a power plant
+
+Electricity is generated in a power plant by converting energy from sources like coal, natural gas, nuclear fuel, wind, or water into electrical energy. Most power plants use a turbine-generator system, where the energy source is used to produce steam, moving water, or air that spins a turbine. The turbine is connected to a generator, which converts the mechanical energy into electrical energy through electromagnetic induction. As the turbine rotates, it turns magnets inside the generator, creating an electric current that is then transmitted through power lines for use in homes, industries, and other facilities.
+
+correct
+
+Electricity is generated in a power plant by converting energy from sources like coal, natural gas, nuclear fuel, wind, or water into electrical energy. Most power plants use a turbine-generator system, where the energy source is used to produce steam, moving water, or air that spins a turbine. The turbine is connected to a generator, which converts the mechanical energy into electrical energy through electromagnetic induction. As the turbine rotates, it turns magnets inside the generator, creating an electric current that is then transmitted through power lines for use in homes, industries, and other facilities.
+
+Partially
+
+Electricity is made by burning coal in a power plant, which directly produces electricity. This electricity is then sent to houses and buildings through wires.
+
+irrrelvent
+
+Electricity is made by burning coal in a power plant, which directly produces electricity. This electricity is then sent to houses and buildings through wires.
