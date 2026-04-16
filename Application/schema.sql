@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS Students (
 CREATE TABLE IF NOT EXISTS Questions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     question TEXT NOT NULL,
-    reference_answer TEXT NOT NULL
+    reference_answer TEXT NOT NULL,
+    domain TEXT NOT NULL DEFAULT 'general'
 );
 
 CREATE TABLE IF NOT EXISTS Submissions (
