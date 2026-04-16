@@ -24,56 +24,52 @@ page = st.sidebar.selectbox(
 
 # 1️⃣ Add Questions
 if page == "➕ Add Questions":
-    domains = [
-        "general",
-        "biology",
-        "science",
-    ]
+    domains = ["general", "biology", "science"]
     st.header("➕ Add a New Question")
 
     if "ques_ocr_text" not in st.session_state:
         st.session_state["ques_ocr_text"] = ""
+
+    question = st.text_area("Question")
+
+    # 📷 Upload image
     uploaded_image = st.file_uploader(
         "📷 Upload Answer Image (optional)",
         type=["png", "jpg", "jpeg"],
         key="question_uploader",
     )
+
+    # 🔍 Extract button (NORMAL BUTTON, NOT FORM)
     if uploaded_image is not None:
         if st.button("🔍 Extract Text"):
             with st.spinner("Processing image..."):
-                image_bytes = uploaded_image.read()
-                ques_ocr_text = extract_text_from_image(image_bytes)
-                # ques_ocr_text = extract_text_from_image(uploaded_image)
+                ques_ocr_text = extract_text_from_image(uploaded_image)
 
             if ques_ocr_text:
-                st.success("✅ Text extracted!")
                 st.session_state["ques_ocr_text"] = ques_ocr_text
+                st.success("✅ Text extracted!")
             else:
                 st.error("❌ OCR failed")
 
-    with st.form("add_question"):
-        question = st.text_area("Question")
+    # 📘 Reference answer
+    reference_answer = st.text_area(
+        "Reference Answer (Ideal Answer)",
+        value=st.session_state["ques_ocr_text"],
+        height=200,
+    )
 
-        reference_answer = st.text_area(
-            "Reference Answer (Ideal Answer)",
-            value=st.session_state["ques_ocr_text"],
-            height=200,
-        )
-        domain = st.selectbox("Domain", domains)
+    domain = st.selectbox("Domain", domains)
+
+    # 🟢 FORM ONLY FOR FINAL SUBMISSION
+    with st.form("add_question"):
         submit = st.form_submit_button("Add Question")
+
         if submit:
             if question and reference_answer:
                 add_question(question, reference_answer, domain)
-                st.success(f"✅ Question added under domain '{domain}'")
+                st.success(f"✅ Question added under '{domain}'")
             else:
                 st.error("❌ Please fill all fields")
-
-    st.subheader("📚 All Questions")
-    questions = get_questions()
-    for q in questions:
-        st.markdown(f"**Q{q['id']}**: {q['question']}")
-        with st.expander("Reference Answer"):
-            st.markdown(q["reference_answer"])
 
 # 2️⃣ Add Students
 elif page == "👤 Add Students":
@@ -121,11 +117,6 @@ elif page == "📝 Submit Answers":
         existing_answer = (
             existing_submission["answer_text"] if existing_submission else ""
         )
-        # key = f"{student['id']}_{question['id']}"
-
-        # if "ocr_texts" not in st.session_state:
-        #     st.session_state["ocr_texts"] = {}
-
         key = f"{student['id']}_{question['id']}"
 
         if "ocr_texts" not in st.session_state:
