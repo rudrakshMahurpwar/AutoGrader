@@ -10,6 +10,7 @@ from grading import (
     combine_scores,
 )
 import json, io, csv
+from ocr_utils import extract_text_from_image
 
 st.set_page_config(page_title="Auto Grader", layout="wide")
 
@@ -26,16 +27,38 @@ if page == "➕ Add Questions":
     domains = [
         "general",
         "biology",
-        # "finance",
-        # "law",
-        # "english",
-        # "technical",
         "science",
     ]
     st.header("➕ Add a New Question")
+
+    if "ques_ocr_text" not in st.session_state:
+        st.session_state["ques_ocr_text"] = ""
+    uploaded_image = st.file_uploader(
+        "📷 Upload Answer Image (optional)",
+        type=["png", "jpg", "jpeg"],
+        key="question_uploader",
+    )
+    if uploaded_image is not None:
+        if st.button("🔍 Extract Text"):
+            with st.spinner("Processing image..."):
+                image_bytes = uploaded_image.read()
+                ques_ocr_text = extract_text_from_image(image_bytes)
+                # ques_ocr_text = extract_text_from_image(uploaded_image)
+
+            if ques_ocr_text:
+                st.success("✅ Text extracted!")
+                st.session_state["ques_ocr_text"] = ques_ocr_text
+            else:
+                st.error("❌ OCR failed")
+
     with st.form("add_question"):
         question = st.text_area("Question")
-        reference_answer = st.text_area("Reference Answer (Ideal Answer)")
+
+        reference_answer = st.text_area(
+            "Reference Answer (Ideal Answer)",
+            value=st.session_state["ques_ocr_text"],
+            height=200,
+        )
         domain = st.selectbox("Domain", domains)
         submit = st.form_submit_button("Add Question")
         if submit:
@@ -98,28 +121,53 @@ elif page == "📝 Submit Answers":
         existing_answer = (
             existing_submission["answer_text"] if existing_submission else ""
         )
+        # key = f"{student['id']}_{question['id']}"
+
+        # if "ocr_texts" not in st.session_state:
+        #     st.session_state["ocr_texts"] = {}
+
+        key = f"{student['id']}_{question['id']}"
+
+        if "ocr_texts" not in st.session_state:
+            st.session_state["ocr_texts"] = {}
+
+        uploaded_image = st.file_uploader(
+            "📷 Upload Answer Image (optional)",
+            type=["png", "jpg", "jpeg"],
+            key="student_uploader",
+        )
+
+        if uploaded_image is not None:
+            if st.button("🔍 Extract Text", key=f"ocr_{key}"):
+                ocr_text = extract_text_from_image(uploaded_image)
+
+                if ocr_text:
+                    st.session_state["ocr_texts"][key] = ocr_text
 
         with st.form("submit_answer"):
-            student_answer = st.text_area("Student's Answer", value=existing_answer)
+            student_answer = st.text_area(
+                "Student's Answer",
+                value=st.session_state["ocr_texts"].get(key, existing_answer),
+                height=200,
+            )
+
             submit = st.form_submit_button("Save Answer")
 
             if submit:
                 try:
                     if existing_submission:
-                        # 🔄 Update existing submission
                         update_submission(
                             existing_submission["submission_id"], student_answer
                         )
                         submission_id = existing_submission["submission_id"]
                         st.info("✏️ Answer updated successfully!")
                     else:
-                        # 🆕 Create new submission
                         submission_id = add_submission(
                             student["id"], question["id"], student_answer
                         )
                         st.success("✅ New answer submitted!")
 
-                    # ✅ Always grade (for both update & new)
+                    # Grading logic
                     similarity_score = compute_chunkwise_similarity(
                         question["reference_answer"],
                         student_answer,
@@ -139,7 +187,6 @@ elif page == "📝 Submit Answers":
                         feedback = llm_result["feedback"]
                         final_score = combine_scores(similarity_score, rubric)
 
-                        # Save score (overwrite if exists)
                         add_score(
                             submission_id,
                             similarity_score,
@@ -152,37 +199,11 @@ elif page == "📝 Submit Answers":
                         st.markdown(f"**Similarity Score:** `{similarity_score}`")
                         st.markdown(f"**Final Score:** `{final_score}`")
 
-                        st.subheader("📊 Rubric")
-                        for crit, score in rubric.items():
-                            st.markdown(f"- **{crit}**: {score}/5")
-
-                        st.subheader("🧠 Feedback")
-                        st.markdown(feedback)
-
-                        # 🔍 Highlight most relevant sentences in student's answer
-                        sentence_scores = get_sentence_similarity_details(
-                            question["reference_answer"], student_answer
-                        )
-
-                        highlighted_answer = ""
-                        for sent, score in sentence_scores:
-                            if score > 0.9:  # threshold
-                                highlighted_answer += f"**`{sent}`** "
-                            else:
-                                highlighted_answer += f"{sent} "
-
-                        st.subheader("Student Answer with Highlights")
-                        st.markdown(highlighted_answer, unsafe_allow_html=True)
-
                 except Exception as e:
-                    # 👨‍🏫 Friendly duplicate error message
                     if "UNIQUE constraint" in str(e):
-                        st.warning(
-                            "⚠️ You have already submitted an answer for this question. Please edit it instead."
-                        )
+                        st.warning("⚠️ Already submitted. Please edit instead.")
                     else:
                         st.error(f"❌ Unexpected error: {e}")
-
 
 # 4️⃣ View Results
 elif page == "📊 View Results":
