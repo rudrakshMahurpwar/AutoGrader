@@ -40,6 +40,20 @@ def encode_with_model(model, sentences):
     return model.encode(sentences, convert_to_tensor=True)
 
 
+def encode_both_models(ref_chunks, student_chunks, model, domain_model):
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = {
+            "gen_ref": executor.submit(encode_with_model, model, ref_chunks),
+            "gen_student": executor.submit(encode_with_model, model, student_chunks),
+            "dom_ref": executor.submit(encode_with_model, domain_model, ref_chunks),
+            "dom_student": executor.submit(
+                encode_with_model, domain_model, student_chunks
+            ),
+        }
+
+        return {k: v.result() for k, v in futures.items()}
+
+
 def sent_tokenize(text):
     return re.split(r"(?<=[.!?])\s+", text.strip())
 
@@ -50,33 +64,39 @@ def compute_chunkwise_similarity(ref_text, student_text, domain="general"):
 
     domain_model = domain_models.get(domain, model)
 
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        future_general_ref = executor.submit(encode_with_model, model, ref_chunks)
-        future_general_student = executor.submit(
-            encode_with_model, model, student_chunks
-        )
-        future_domain_ref = executor.submit(encode_with_model, domain_model, ref_chunks)
-        future_domain_student = executor.submit(
-            encode_with_model, domain_model, student_chunks
-        )
+    enc = encode_both_models(ref_chunks, student_chunks, model, domain_model)
 
-        general_ref_emb = future_general_ref.result()
-        general_student_emb = future_general_student.result()
-        domain_ref_emb = future_domain_ref.result()
-        domain_student_emb = future_domain_student.result()
+    general_ref = enc["gen_ref"]
+    general_student = enc["gen_student"]
+    domain_ref = enc["dom_ref"]
+    domain_student = enc["dom_student"]
 
-    # Compute cosine similarity for both
-    sim_general = util.cos_sim(general_ref_emb, general_student_emb)
-    sim_domain = util.cos_sim(domain_ref_emb, domain_student_emb)
+    sim_general = util.cos_sim(general_ref, general_student)
+    sim_domain = util.cos_sim(domain_ref, domain_student)
 
-    # Aggregate final similarity
-    avg_general = sim_general.mean().item()
-    avg_domain = sim_domain.mean().item()
+    # alignment
+    ref_gen = sim_general.max(dim=1).values
+    ref_dom = sim_domain.max(dim=1).values
+    stu_gen = sim_general.max(dim=0).values
+    stu_dom = sim_domain.max(dim=0).values
 
-    # Weighted final similarity: e.g., 60% domain, 40% general
-    final_similarity = round(0.4 * avg_general + 0.6 * avg_domain, 4)
+    ref_align = 0.4 * ref_gen + 0.6 * ref_dom
+    stu_align = 0.4 * stu_gen + 0.6 * stu_dom
 
-    return final_similarity
+    # key content weighting
+    weights = torch.ones(len(ref_chunks))
+    weights[:2] = 2.0
+    weights = weights.to(ref_align.device).type_as(ref_align)
+
+    ref_score = (ref_align * weights).sum() / weights.sum()
+
+    # irrelevance penalty
+    threshold = torch.quantile(sim_general, 0.25).item()
+    irrelevance_ratio = (stu_align < threshold).float().mean().item()
+
+    final_score = ref_score * (1 - 0.35 * irrelevance_ratio)
+
+    return round(final_score.item(), 4)
 
 
 def get_sentence_similarity_details(ref_text, student_text):
